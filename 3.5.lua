@@ -700,7 +700,7 @@ local function teleportLoop()
                 game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
             end
         end
-        wait(0.01) -- Intervalo entre as verificações (ajustável conforme necessário)
+        wait(0.3) -- Intervalo entre as verificações (ajustável conforme necessário)
     end
 end
 
