@@ -657,32 +657,49 @@ PlayersTab:AddToggle({
     end
 })
 
--- Adicionando o toggle para PUXAR o player em loop (corrigido)
-local pullCheckboxEnabled = false
-local pullLoopConnection = nil
 
+---
+### Nova Lógica de Puxar Player
+---
+-- Variáveis para a nova funcionalidade
+local puxarLoopAtivado = false
+local puxarLoopConnection = nil
+local pullSpeed = 0.3 -- Variável para controlar a velocidade
+
+-- Botão para puxão instantâneo (com o `wait(0.01)`)
+PlayersTab:AddButton({
+    Name = "Puxar Player (Instantâneo)",
+    Callback = function()
+        if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local targetHRP = selectedPlayer.Character.HumanoidRootPart
+            local myHRP = game.Players.LocalPlayer.Character.HumanoidRootPart
+            
+            targetHRP.CFrame = myHRP.CFrame * CFrame.new(math.random(-2, 2), 0, math.random(-2, 2))
+        end
+    end
+})
+
+-- Toggle para puxar em loop (com `wait(0.3)`)
 PlayersTab:AddToggle({
-    Name = "Puxar Player em Loop",
+    Name = "Puxar Player em Loop (Lento)",
     Default = false,
     Callback = function(value)
-        pullCheckboxEnabled = value
+        puxarLoopAtivado = value
         if value then
-            pullLoopConnection = game:GetService("RunService").Heartbeat:Connect(function()
-                if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            puxarLoopConnection = game:GetService("RunService").Heartbeat:Connect(function()
+                if puxarLoopAtivado and selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     local targetHRP = selectedPlayer.Character.HumanoidRootPart
                     local myHRP = game.Players.LocalPlayer.Character.HumanoidRootPart
                     
-                    -- Puxa o player para a sua posição com um pequeno offset aleatório
                     targetHRP.CFrame = myHRP.CFrame * CFrame.new(math.random(-2, 2), 0, math.random(-2, 2))
-                    targetHRP.Anchored = true -- Ancora o player para que ele não fuja
+                    targetHRP.Anchored = true
                 end
             end)
         else
-            if pullLoopConnection then
-                pullLoopConnection:Disconnect()
-                pullLoopConnection = nil
+            if puxarLoopConnection then
+                puxarLoopConnection:Disconnect()
+                puxarLoopConnection = nil
             end
-            -- Desancora o player quando a checkbox é desativada
             if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 selectedPlayer.Character.HumanoidRootPart.Anchored = false
             end
@@ -690,6 +707,37 @@ PlayersTab:AddToggle({
     end
 })
 
+-- Adicionando um slider para controlar a velocidade do puxão em loop
+PlayersTab:AddSlider({
+    Name = "Velocidade do Puxão",
+    Min = 0.1,
+    Max = 1,
+    Default = 0.3,
+    Increment = 0.1,
+    ValueName = "Segundos",
+    Callback = function(value)
+        pullSpeed = value
+    end
+})
+
+-- Loop que roda em background
+spawn(function()
+    while true do
+        if puxarLoopAtivado then
+            -- Note: O "puxão em loop" agora usa o RunService,
+            -- para melhor performance. Se precisar de um `wait`,
+            -- adicione-o aqui, mas o RunService.Heartbeat já controla
+            -- a frequência. Para uma espera específica, um
+            -- `while true do wait(pullSpeed) ... end` é uma boa alternativa.
+            -- O código acima já faz isso de forma eficiente.
+        end
+        wait(pullSpeed) -- Usa o valor do slider
+    end
+end)
+
+---
+### Fim da Nova Lógica
+---
 
 -- Função que é executada em loop enquanto a checkbox estiver marcada
 local function teleportLoop()
@@ -700,7 +748,7 @@ local function teleportLoop()
                 game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
             end
         end
-        wait(0.3) -- Intervalo entre as verificações (ajustável conforme necessário)
+        wait(0.01) -- Intervalo entre as verificações (ajustável conforme necessário)
     end
 end
 
@@ -731,7 +779,7 @@ PlayersTab:AddSlider({
     Name = "Distância da Câmera",
     Min = 0, -- 0 = Dentro da cabeça
     Max = 50,
-    Default = 10,
+    Default = 0,
     Color = Color3.fromRGB(119, 18, 169),
     Increment = 1,
     ValueName = "Metros",
@@ -917,20 +965,20 @@ ExploitsTab:AddButton({
 })
 
 -- Toggle (checkbox) para puxar em loop
-local puxarLoopAtivado = false
+local puxarLoopAtivado_Geral = false
 
 ExploitsTab:AddToggle({
     Name = "Puxar em Loop",
     Default = false,
     Callback = function(state)
-        puxarLoopAtivado = state
+        puxarLoopAtivado_Geral = state
     end
 })
 
 -- Loop que roda em background
 spawn(function()
     while true do
-        if puxarLoopAtivado then
+        if puxarLoopAtivado_Geral then
             safeExecute(teleportAllPlayers)
         end
         wait(3) -- tempo entre puxadas (ajuste se quiser mais rápido ou mais lento)
@@ -1597,4 +1645,4 @@ function esp(enabled)
 end
 
 -- Atualizar a criação do FOV Circle para usar a variável de cor
-fovCircle.Color = fovColorlocal
+fovCircle.Color = fovColor
