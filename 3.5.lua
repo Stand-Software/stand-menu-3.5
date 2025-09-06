@@ -7,6 +7,7 @@ local flyEnabled = false
 local espDistance = 500 -- Distância máxima para renderizar qualquer ESP
 local isFlying = false
 local speed = 20
+local boostSpeed = 350 -- Velocidade de boost do Shift (valor padrão para o slider)
 local bodyVelocity, bodyGyro, connection
 local aimbotEnabled = false
 local aimSensitivity = 0.3
@@ -396,28 +397,35 @@ local function enableFly()
         local cam = workspace.CurrentCamera.CFrame
         local moveDir = Vector3.new()
         
-        -- Verifica teclas pressionadas
-        if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.W) then
+        -- NOVOS: Controles de movimento para frente e lados (W,A,S,D)
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
             moveDir = moveDir + Vector3.new(0, 0, -1)
         end
-        if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.S) then
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
             moveDir = moveDir + Vector3.new(0, 0, 1)
         end
-        if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.A) then
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
             moveDir = moveDir + Vector3.new(-1, 0, 0)
         end
-        if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.D) then
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
             moveDir = moveDir + Vector3.new(1, 0, 0)
         end
-        if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.Space) then
+        
+        -- NOVOS: Controles de subir e descer (E/Q)
+        if UserInputService:IsKeyDown(Enum.KeyCode.E) then
             moveDir = moveDir + Vector3.new(0, 1, 0)
         end
-        if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.LeftShift) then
+        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then
             moveDir = moveDir + Vector3.new(0, -1, 0)
         end
 
+        local currentSpeed = speed
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+            currentSpeed = speed + boostSpeed
+        end
+
         -- Aplica velocidade
-        local velocity = cam:VectorToWorldSpace(moveDir) * speed
+        local velocity = cam:VectorToWorldSpace(moveDir) * currentSpeed
         bodyVelocity.Velocity = velocity
 
         -- Noclip
@@ -722,7 +730,7 @@ end
 
 -- Adicionando o toggle para o teleporte em loop
 PlayersTab:AddToggle({
-    Name = "Teleportar ( Loop )",
+    Name = "Teleporte ( Loop )",
     Default = false,
     Callback = function(value)
         tpCheckboxChecked = value
@@ -734,7 +742,7 @@ PlayersTab:AddToggle({
 
 -- Adicionando o toggle para Arrastar o player (o teleporte suave)
 PlayersTab:AddToggle({
-    Name = "Arrastar Player",
+    Name = "Arrastar Player ( Loop )",
     Default = false,
     Callback = function(value)
         arrastarCheckboxEnabled = value
@@ -755,7 +763,7 @@ PlayersTab:AddToggle({
 
 -- Adicionando o toggle para Puxar o player (o teleporte instantâneo)
 PlayersTab:AddToggle({
-    Name = "Puxar Player",
+    Name = "Puxar Player ( Loop )",
     Default = false,
     Callback = function(value)
         puxarCheckboxEnabled = value
@@ -1126,7 +1134,7 @@ Tab:AddToggle({
 
 Tab:AddBind({
     Name = "Bind Voar",
-    Default = Enum.KeyCode.E,
+    Default = Enum.KeyCode.CapsLock,
     Hold = false,
     Callback = function()
         if flyEnabled then
@@ -1153,18 +1161,29 @@ Tab:AddSlider({
     end    
 })
 
+Tab:AddSlider({
+    Name = "Velocidade do Shift",
+    Min = 100,
+    Max = 1000,
+    Default = 350,
+    Color = Color3.fromRGB(119, 18, 169),
+    Increment = 1,
+    ValueName = "Velocidade",
+    Callback = function(value)
+        boostSpeed = value
+    end
+})
+
 local sectionVoice = Tab:AddSection({ Name = "Teleport Forward" })
 
 -- Função de teleporte para frente
 local function teleportForward()
-    local player = game.Players.LocalPlayer
-    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    local player = game:GetService("Players").LocalPlayer
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
 
-    local hrp = player.Character.HumanoidRootPart
     local lookVector = hrp.CFrame.LookVector
-    local distance = 5-- Distância para frente (pode ajustar)
-
-    -- Teleportar na direção que está olhando
+    local distance = 5
     hrp.CFrame = hrp.CFrame + (lookVector * distance)
 end
 
@@ -1181,7 +1200,7 @@ local UserInputService = game:GetService("UserInputService")
 
 UserInputService.JumpRequest:Connect(function()
     if infiniteJumpEnabled then
-        local player = game.Players.LocalPlayer
+        local player = game:GetService("Players").LocalPlayer
         if player.Character and player.Character:FindFirstChild("Humanoid") then
             player.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
         end
@@ -1197,24 +1216,23 @@ Tab:AddToggle({
     end
 })
 
-function esp(enabled)
+-- Funções para ESP
+local function esp(enabled)
     if not enabled then
-        if game.CoreGui:FindFirstChild("Highlight_Storage") then
-            game.CoreGui.Highlight_Storage:Destroy()
+        if game:GetService("CoreGui"):FindFirstChild("Highlight_Storage") then
+            game:GetService("CoreGui").Highlight_Storage:Destroy()
         end
         return
     end
 
-    -- Usar variáveis globais para as cores
     local FillColor = chamFillColor
     local OutlineColor = chamOutlineColor
-
     local DepthMode = "AlwaysOnTop"
     local FillTransparency = 0.5
     local OutlineTransparency = 0
 
-    local CoreGui = game:FindService("CoreGui")
-    local Players = game:FindService("Players")
+    local CoreGui = game:GetService("CoreGui")
+    local Players = game:GetService("Players")
     local lp = Players.LocalPlayer
     local connections = {}
 
@@ -1243,7 +1261,7 @@ function esp(enabled)
     end
 
     Players.PlayerAdded:Connect(Highlight)
-    for i, v in next, Players:GetPlayers() do
+    for _, v in ipairs(Players:GetPlayers()) do
         if v ~= lp then
             Highlight(v)
         end
@@ -1558,7 +1576,7 @@ WallTab:AddColorpicker({
             box.Color = color
         end
 
-        local highlightStorage = game.CoreGui:FindFirstChild("Highlight_Storage")
+        local highlightStorage = game:GetService("CoreGui"):FindFirstChild("Highlight_Storage")
         if highlightStorage then
             for _, highlight in pairs(highlightStorage:GetChildren()) do
                 if highlight:IsA("Highlight") then
@@ -1656,12 +1674,64 @@ AimbotTab:AddColorpicker({
 
 -- Atualizar a função esp para usar as variáveis de cor
 function esp(enabled)
-    -- ... código existente ...
-    
+    if not enabled then
+        if game:GetService("CoreGui"):FindFirstChild("Highlight_Storage") then
+            game:GetService("CoreGui").Highlight_Storage:Destroy()
+        end
+        return
+    end
+
     local FillColor = chamFillColor
     local OutlineColor = chamOutlineColor
-    
-    -- ... restante do código ...
+    local DepthMode = "AlwaysOnTop"
+    local FillTransparency = 0.5
+    local OutlineTransparency = 0
+
+    local CoreGui = game:GetService("CoreGui")
+    local Players = game:GetService("Players")
+    local lp = Players.LocalPlayer
+    local connections = {}
+
+    local Storage = Instance.new("Folder")
+    Storage.Parent = CoreGui
+    Storage.Name = "Highlight_Storage"
+
+    local function Highlight(plr)
+        local Highlight = Instance.new("Highlight")
+        Highlight.Name = plr.Name
+        Highlight.FillColor = FillColor
+        Highlight.DepthMode = DepthMode
+        Highlight.FillTransparency = FillTransparency
+        Highlight.OutlineColor = OutlineColor
+        Highlight.OutlineTransparency = OutlineTransparency
+        Highlight.Parent = Storage
+        
+        local plrchar = plr.Character
+        if plrchar then
+            Highlight.Adornee = plrchar
+        end
+
+        connections[plr] = plr.CharacterAdded:Connect(function(char)
+            Highlight.Adornee = char
+        end)
+    end
+
+    Players.PlayerAdded:Connect(Highlight)
+    for _, v in ipairs(Players:GetPlayers()) do
+        if v ~= lp then
+            Highlight(v)
+        end
+    end
+
+    Players.PlayerRemoving:Connect(function(plr)
+        local plrname = plr.Name
+        if Storage:FindFirstChild(plrname) then
+            Storage[plrname]:Destroy()
+        end
+        if connections[plr] then
+            connections[plr]:Disconnect()
+        end
+    end)
 end
 
 -- Atualizar a criação do FOV Circle para usar a variável de cor
