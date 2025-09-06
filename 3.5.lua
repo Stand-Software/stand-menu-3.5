@@ -1,6 +1,6 @@
 local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/jensonhirst/Orion/main/source')))()
 
-local Window = OrionLib:MakeWindow({Name = "💎Stand Menu V3.4", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})
+local Window = OrionLib:MakeWindow({Name = "💎Stand Menu V3.5", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})
 
 -- Variáveis de controle
 local flyEnabled = false
