@@ -647,65 +647,132 @@ PlayersTab:AddButton({
 
 -- Variável que controla o estado do teleporte em loop
 local tpCheckboxChecked = false
-
--- Adicionando o toggle para o teleporte em loop
-PlayersTab:AddToggle({
-    Name = "Teleporte em Loop",
-    Default = false, -- Estado inicial (desmarcado)
-    Callback = function(value)
-        tpCheckboxChecked = value  -- Atualiza o estado da checkbox
-    end
-})
-
--- Adicionando o toggle para PUXAR o player em loop (corrigido)
-local pullCheckboxEnabled = false
-local pullLoopConnection = nil
-
-PlayersTab:AddToggle({
-    Name = "Puxar Player em Loop",
-    Default = false,
-    Callback = function(value)
-        pullCheckboxEnabled = value
-        if value then
-            pullLoopConnection = game:GetService("RunService").Heartbeat:Connect(function()
-                if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local targetHRP = selectedPlayer.Character.HumanoidRootPart
-                    local myHRP = game.Players.LocalPlayer.Character.HumanoidRootPart
-                    
-                    -- Puxa o player para a sua posição com um pequeno offset aleatório
-                    targetHRP.CFrame = myHRP.CFrame * CFrame.new(math.random(-2, 2), 0, math.random(-2, 2))
-                    targetHRP.Anchored = true -- Ancora o player para que ele não fuja
-                end
-            end)
-        else
-            if pullLoopConnection then
-                pullLoopConnection:Disconnect()
-                pullLoopConnection = nil
-            end
-            -- Desancora o player quando a checkbox é desativada
-            if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                selectedPlayer.Character.HumanoidRootPart.Anchored = false
-            end
-        end
-    end
-})
+local puxarCheckboxEnabled = false -- NOVO: Variável para o puxar instantâneo
+local arrastarCheckboxEnabled = false -- NOVO: Variável para o arrastar suave
+local puxarLoopConnection = nil
+local arrastarLoopConnection = nil
 
 
--- Função que é executada em loop enquanto a checkbox estiver marcada
-local function teleportLoop()
+-- NOVO: Função para o teleporte em loop do seu jogador para o player selecionado (em 0.01s)
+local function teleportLoop_PlayerToMe()
     while true do
         if tpCheckboxChecked then
-            if selectedPlayer and selectedPlayer.Character then
+            if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 local targetPos = selectedPlayer.Character.HumanoidRootPart.Position
+                -- Teleporte instantâneo para você (0.01 segundos)
                 game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
             end
         end
-        wait(0.01) -- Intervalo entre as verificações (ajustável conforme necessário)
+        task.wait(0.01)
     end
 end
 
--- Iniciar o loop de teleporte em segundo plano
-spawn(teleportLoop)
+-- NOVA FUNÇÃO: Arrastar Player (suave)
+local function arrastarPlayerLoop()
+    while arrastarCheckboxEnabled do
+        if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local targetHRP = selectedPlayer.Character.HumanoidRootPart
+            local myHRP = game.Players.LocalPlayer.Character.HumanoidRootPart
+            
+            -- Teleporte mais lento e suave para o player (0.5 segundos)
+            local startPos = targetHRP.Position
+            local endPos = myHRP.Position + Vector3.new(math.random(-2, 2), 0, math.random(-2, 2))
+            
+            local startTime = tick()
+            local duration = 0.5
+            while (tick() - startTime) < duration do
+                local alpha = (tick() - startTime) / duration
+                if targetHRP and targetHRP.Parent and targetHRP.Anchored then
+                    targetHRP.CFrame = CFrame.new(startPos:Lerp(endPos, alpha))
+                end
+                task.wait() -- Espera o próximo frame
+            end
+            
+            targetHRP.CFrame = CFrame.new(endPos)
+            targetHRP.Anchored = true
+        end
+        task.wait(0.5) -- Espera 0.5 segundos para a próxima puxada
+    end
+    
+    -- Desancora o player quando a checkbox é desativada
+    if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        selectedPlayer.Character.HumanoidRootPart.Anchored = false
+    end
+end
+
+-- NOVA FUNÇÃO: Puxar Player (antiga, instantânea)
+local function puxarPlayerLoop()
+    while puxarCheckboxEnabled do
+        if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local targetHRP = selectedPlayer.Character.HumanoidRootPart
+            local myHRP = game.Players.LocalPlayer.Character.HumanoidRootPart
+            
+            -- Puxa o player para a sua posição com um pequeno offset aleatório
+            targetHRP.CFrame = myHRP.CFrame * CFrame.new(math.random(-2, 2), 0, math.random(-2, 2))
+            targetHRP.Anchored = true -- Ancora o player para que ele não fuja
+        end
+        task.wait()
+    end
+    
+    -- Desancora o player quando a checkbox é desativada
+    if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        selectedPlayer.Character.HumanoidRootPart.Anchored = false
+    end
+end
+
+-- Adicionando o toggle para o teleporte em loop
+PlayersTab:AddToggle({
+    Name = "Teleportar ( Loop )",
+    Default = false,
+    Callback = function(value)
+        tpCheckboxChecked = value
+        if value then
+            spawn(teleportLoop_PlayerToMe)
+        end
+    end
+})
+
+-- Adicionando o toggle para Arrastar o player (o teleporte suave)
+PlayersTab:AddToggle({
+    Name = "Arrastar Player",
+    Default = false,
+    Callback = function(value)
+        arrastarCheckboxEnabled = value
+        if value then
+            if puxarLoopConnection then
+                puxarLoopConnection:Disconnect()
+                puxarLoopConnection = nil
+            end
+            arrastarLoopConnection = game:GetService("RunService").Heartbeat:Connect(arrastarPlayerLoop)
+        else
+            if arrastarLoopConnection then
+                arrastarLoopConnection:Disconnect()
+                arrastarLoopConnection = nil
+            end
+        end
+    end
+})
+
+-- Adicionando o toggle para Puxar o player (o teleporte instantâneo)
+PlayersTab:AddToggle({
+    Name = "Puxar Player",
+    Default = false,
+    Callback = function(value)
+        puxarCheckboxEnabled = value
+        if value then
+            if arrastarLoopConnection then
+                arrastarLoopConnection:Disconnect()
+                arrastarLoopConnection = nil
+            end
+            puxarLoopConnection = game:GetService("RunService").Heartbeat:Connect(puxarPlayerLoop)
+        else
+            if puxarLoopConnection then
+                puxarLoopConnection:Disconnect()
+                puxarLoopConnection = nil
+            end
+        end
+    end
+})
 
 -- Atualizar o toggle de espectar
 PlayersTab:AddToggle({
@@ -798,7 +865,8 @@ ExploitsTab:AddButton({
                 Title = "Voice Chat",
                 Text = "VoiceChatService indisponível.",
                 Duration = 3
-            })
+                
+                })
         end
     end
 })
@@ -920,7 +988,7 @@ ExploitsTab:AddButton({
 local puxarLoopAtivado = false
 
 ExploitsTab:AddToggle({
-    Name = "Puxar em Loop",
+    Name = "Puxar Players ( Loop )",
     Default = false,
     Callback = function(state)
         puxarLoopAtivado = state
@@ -1597,4 +1665,4 @@ function esp(enabled)
 end
 
 -- Atualizar a criação do FOV Circle para usar a variável de cor
-fovCircle.Color = fovColorlocal
+fovCircle.Color = fovColor
