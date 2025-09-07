@@ -50,6 +50,8 @@ local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 local humanoid = character:FindFirstChildOfClass("Humanoid")
 
 local freecamEnabled = false
+local freecamToggleActive = false
+local freecamToggleBind = Enum.KeyCode.N
 local cameraOffset = Vector3.new(0, 5, 10)
 local mouseDelta = Vector2.new(0, 0)
 local mouseMovementConnection
@@ -57,6 +59,11 @@ local teleportConnection
 local renderSteppedConnection
 local moveSpeed = 0.5
 local rotationSpeedQ = 0.001 -- Esta variável agora controla todas as rotações
+
+-- Variáveis para a nova velocidade do mouse
+local mouseSpeedX = 0.1
+local mouseSpeedY = 0.1
+local freecamBoostSpeed = 2 -- Velocidade de boost do freecam
 
 -- Variáveis essenciais
 local Player = game:GetService("Players").LocalPlayer
@@ -77,7 +84,13 @@ local function enableFreecam()
     if not freecamEnabled then
         freecamEnabled = true
         Camera.CameraType = Enum.CameraType.Scriptable
-        Camera.CFrame = HumanoidRootPart.CFrame * CFrame.new(cameraOffset)
+        
+        -- Garante que a câmera comece na posição do jogador e olhe para frente
+        Camera.CFrame = HumanoidRootPart.CFrame
+        
+        -- Trava o mouse no centro da tela para um movimento de câmera mais suave
+        UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+        UserInputService.MouseIconEnabled = false
         
         -- Desabilitar movimentação do personagem
         if Humanoid then
@@ -113,43 +126,44 @@ local function enableFreecam()
         
         renderSteppedConnection = RunService.RenderStepped:Connect(function()
             if freecamEnabled then
+                local currentMoveSpeed = moveSpeed
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                    currentMoveSpeed = currentMoveSpeed + freecamBoostSpeed
+                end
+                
                 local moveDirection = Vector3.new(0, 0, 0)
                 
-                -- Controles de movimento
+                -- Controles de movimento horizontal (WASD)
                 if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDirection = moveDirection + Vector3.new(0, 0, -1) end
                 if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDirection = moveDirection + Vector3.new(0, 0, 1) end
                 if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDirection = moveDirection + Vector3.new(-1, 0, 0) end
                 if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDirection = moveDirection + Vector3.new(1, 0, 0) end
-                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDirection = moveDirection + Vector3.new(0, 1, 0) end
-                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDirection = moveDirection + Vector3.new(0, -1, 0) end
                 
-                -- Aplicar movimento
-                Camera.CFrame = Camera.CFrame * CFrame.new(moveDirection * moveSpeed)
+                -- Controles de movimento vertical (E/Q)
+                if UserInputService:IsKeyDown(Enum.KeyCode.E) then moveDirection = moveDirection + Vector3.new(0, 1, 0) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Q) then moveDirection = moveDirection + Vector3.new(0, -1, 0) end
                 
-                -- Rotação horizontal (Q/E)
-                if UserInputService:IsKeyDown(Enum.KeyCode.Q) then
-                    Camera.CFrame = Camera.CFrame * CFrame.Angles(0, rotationSpeedQ, 0)
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.E) then
-                    Camera.CFrame = Camera.CFrame * CFrame.Angles(0, -rotationSpeedQ, 0)
-                end
-                
-                -- Rotação vertical (Z/X) - Adicionado aqui
-                if UserInputService:IsKeyDown(Enum.KeyCode.Z) then
-                    Camera.CFrame = Camera.CFrame * CFrame.Angles(rotationSpeedQ, 0, 0)
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.X) then
-                    Camera.CFrame = Camera.CFrame * CFrame.Angles(-rotationSpeedQ, 0, 0)
-                end
+                -- Aplica movimento
+                Camera.CFrame = Camera.CFrame * CFrame.new(moveDirection * currentMoveSpeed)
                 
                 -- Rotação com mouse
-                if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-                    local sensitivity = 0.1
-                    Camera.CFrame = Camera.CFrame * CFrame.Angles(0, -mouseDelta.X * sensitivity, 0) * CFrame.Angles(-mouseDelta.Y * sensitivity, 0, 0)
-                    mouseDelta = Vector2.new(0, 0)
-                end
+                local rotationX = -mouseDelta.Y * mouseSpeedY
+                local rotationY = -mouseDelta.X * mouseSpeedX
+                
+                -- Aplica a rotação de forma separada para evitar "roll"
+                Camera.CFrame = Camera.CFrame * CFrame.Angles(rotationX, 0, 0) * CFrame.Angles(0, rotationY, 0)
+                
+                -- Zera o mouseDelta para evitar o movimento contínuo
+                mouseDelta = Vector2.new(0, 0)
             end
         end)
+        
+        OrionLib:MakeNotification({
+            Name = "Freecam",
+            Content = "Freecam Ativado!",
+            Image = "rbxassetid://4483345998",
+            Time = 3
+        })
     end
 end
 
@@ -157,6 +171,10 @@ local function disableFreecam()
     freecamEnabled = false
     Camera.CameraType = Enum.CameraType.Custom
     Camera.CFrame = HumanoidRootPart.CFrame
+    
+    -- Restaura o comportamento padrão do mouse
+    UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+    UserInputService.MouseIconEnabled = true
     
     -- Desconectar conexões
     if mouseMovementConnection then mouseMovementConnection:Disconnect() end
@@ -169,6 +187,13 @@ local function disableFreecam()
         Humanoid.JumpPower = 50
         Humanoid.PlatformStand = false
     end
+
+    OrionLib:MakeNotification({
+        Name = "Freecam",
+        Content = "Freecam Desativado!",
+        Image = "rbxassetid://4483345998",
+        Time = 3
+    })
 end
 
 -- Funções para Box ESP
@@ -834,6 +859,77 @@ local ExploitsTab = Window:MakeTab({
     PremiumOnly = false
 })
 
+local Section = ExploitsTab:AddSection({
+    Name = "Freecam"
+})
+
+ExploitsTab:AddToggle({
+    Name = "Habilitar Keybind (Freecam)",
+    Default = false,
+    Callback = function(value)
+        freecamToggleActive = value
+    end
+})
+
+ExploitsTab:AddBind({
+    Name = "Toggle Freecam",
+    Default = Enum.KeyCode.N,
+    Hold = false,
+    Callback = function()
+        if freecamToggleActive then
+            if freecamEnabled then
+                disableFreecam()
+            else
+                enableFreecam()
+            end
+        end
+    end
+})
+
+ExploitsTab:AddSlider({
+    Name = "Velocidade Freecam",
+    Min = 0.5,
+    Max = 5,
+    Default = 1,
+    Increment = 0.5,
+    Callback = function(value)
+        moveSpeed = value
+    end
+})
+
+ExploitsTab:AddSlider({
+    Name = "Velocidade do Boost (Freecam)",
+    Min = 1,
+    Max = 10,
+    Default = 3.5,
+    Increment = 0.5,
+    Callback = function(value)
+        freecamBoostSpeed = value
+    end
+})
+
+ExploitsTab:AddSlider({
+    Name = "Velocidade X (Mouse)",
+    Min = 0.01,
+    Max = 2,
+    Default = 0.01,
+    Increment = 0.01,
+    Callback = function(value)
+        mouseSpeedX = value
+    end
+})
+
+ExploitsTab:AddSlider({
+    Name = "Velocidade Y (Mouse)",
+    Min = 0.01,
+    Max = 2,
+    Default = 0.01,
+    Increment = 0.01,
+    Callback = function(value)
+        mouseSpeedY = value
+    end
+})
+
 -- Seções da aba Exploits
 local sectionVoice = ExploitsTab:AddSection({ Name = "Voice" })
 
@@ -879,63 +975,6 @@ ExploitsTab:AddButton({
     end
 })
 
-local sectionVisual = ExploitsTab:AddSection({ Name = "Shaders " })
-
-local shadersAtivos = false
-local lighting = game:GetService("Lighting")
-
-ExploitsTab:AddToggle({
-    Name = "Ativar Shaders",
-    Default = false,
-    Callback = function(estado)
-        shadersAtivos = estado
-
-        if estado then
-            -- Color Correction (suave e sem laranja)
-            local cc = Instance.new("ColorCorrectionEffect", lighting)
-            cc.Name = "JapaColor"
-            cc.Brightness = 0.05
-            cc.Contrast = 0.2
-            cc.Saturation = 0.3
-            cc.TintColor = Color3.fromRGB(240, 240, 255) -- Azul claro levemente frio
-
-            -- Bloom (brilho suave)
-            local bloom = Instance.new("BloomEffect", lighting)
-            bloom.Name = "JapaBloom"
-            bloom.Intensity = 0.25
-            bloom.Threshold = 0.8
-            bloom.Size = 64
-
-            -- Depth of Field (foco de câmera)
-            local dof = Instance.new("DepthOfFieldEffect", lighting)
-            dof.Name = "JapaDOF"
-            dof.FarIntensity = 0.2
-            dof.FocusDistance = 35
-            dof.InFocusRadius = 50
-            dof.NearIntensity = 0.1
-
-            -- Luz ambiente refinada
-            lighting.Ambient = Color3.fromRGB(100, 100, 120)
-            lighting.OutdoorAmbient = Color3.fromRGB(130, 130, 145)
-            lighting.Brightness = 3
-
-            print("✨ Shaders estilosos ativados.")
-        else
-            -- Remover efeitos
-            for _, name in ipairs({"JapaColor", "JapaBloom", "JapaDOF"}) do
-                local e = lighting:FindFirstChild(name)
-                if e then e:Destroy() end
-            end
-
-            -- Restaurar iluminação padrão
-            lighting.Ambient = Color3.fromRGB(127, 127, 127)
-            lighting.OutdoorAmbient = Color3.fromRGB(127, 127, 127)
-            lighting.Brightness = 2
-
-            print("❌ Shaders desativados.")
-        end
-    end
-})
 
 local sectionPuxar = ExploitsTab:AddSection({ Name = "Puxar Players" })
 
@@ -1021,44 +1060,6 @@ local ConfigTab = Window:MakeTab({
 })
 
 local Section = ConfigTab:AddSection({
-    Name = "Freecam"
-})
-
-ConfigTab:AddToggle({
-    Name = "Ativar Freecam",
-    Default = false,
-    Callback = function(value)
-        if value then
-            enableFreecam()
-        else
-            disableFreecam()
-        end
-    end
-})
-
-ConfigTab:AddSlider({
-    Name = "Velocidade Freecam",
-    Min = 0.5,
-    Max = 5,
-    Default = 1,
-    Increment = 0.5,
-    Callback = function(value)
-        moveSpeed = value
-    end
-})
-
-ConfigTab:AddSlider({
-    Name = "Velocidade Rotação (Q / E)",
-    Min = 0.01,
-    Max = 0.1,
-    Default = 0.01,
-    Increment = 0.001,
-    Callback = function(value)
-        rotationSpeedQ = value
-    end
-})
-
-local Section = ConfigTab:AddSection({
     Name = "Configurações"
 })
 
@@ -1105,6 +1106,61 @@ ConfigTab:AddBind({
     end
 })
 
+local shadersAtivos = false
+local lighting = game:GetService("Lighting")
+
+ConfigTab:AddToggle({
+    Name = "Ativar Shaders",
+    Default = false,
+    Callback = function(estado)
+        shadersAtivos = estado
+
+        if estado then
+            -- Color Correction (suave e sem laranja)
+            local cc = Instance.new("ColorCorrectionEffect", lighting)
+            cc.Name = "JapaColor"
+            cc.Brightness = 0.05
+            cc.Contrast = 0.2
+            cc.Saturation = 0.3
+            cc.TintColor = Color3.fromRGB(240, 240, 255) -- Azul claro levemente frio
+
+            -- Bloom (brilho suave)
+            local bloom = Instance.new("BloomEffect", lighting)
+            bloom.Name = "JapaBloom"
+            bloom.Intensity = 0.25
+            bloom.Threshold = 0.8
+            bloom.Size = 64
+
+            -- Depth of Field (foco de câmera)
+            local dof = Instance.new("DepthOfFieldEffect", lighting)
+            dof.Name = "JapaDOF"
+            dof.FarIntensity = 0.2
+            dof.FocusDistance = 35
+            dof.InFocusRadius = 50
+            dof.NearIntensity = 0.1
+
+            -- Luz ambiente refinada
+            lighting.Ambient = Color3.fromRGB(100, 100, 120)
+            lighting.OutdoorAmbient = Color3.fromRGB(130, 130, 145)
+            lighting.Brightness = 3
+
+            print("✨ Shaders estilosos ativados.")
+        else
+            -- Remover efeitos
+            for _, name in ipairs({"JapaColor", "JapaBloom", "JapaDOF"}) do
+                local e = lighting:FindFirstChild(name)
+                if e then e:Destroy() end
+            end
+
+            -- Restaurar iluminação padrão
+            lighting.Ambient = Color3.fromRGB(127, 127, 127)
+            lighting.OutdoorAmbient = Color3.fromRGB(127, 127, 127)
+            lighting.Brightness = 2
+
+            print("❌ Shaders desativados.")
+        end
+    end
+})
 
 ConfigTab:AddButton({
     Name = "Reiniciar Script",
@@ -1658,7 +1714,6 @@ AimbotTab:AddSlider({
         aimDistance = Value
     end
 })
-
 
 
 -- Na seção Aimbot (adicionar após os sliders existentes)
