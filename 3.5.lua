@@ -19,7 +19,7 @@ fovCircle.NumSides = 100
 fovCircle.Radius = fovSize
 fovCircle.Filled = false
 fovCircle.Visible = false
-local aimDistance = 100 -- Valor padrão
+local aimDistance = 500 -- Sincronizado com espDistance
 local AimbotEnabled = false
 local BoxESPEnabled = false
 local NameTagsEnabled = false
@@ -196,14 +196,23 @@ local function disableFreecam()
     })
 end
 
--- Funções para Box ESP
-local function CreateBox()
+-- Funções de criação e atualização dos elementos (refatoradas para o loop principal)
+local function CreateBox(player)
     local box = Drawing.new("Square")
-    box.Thickness = 2.5
+    box.Thickness = 1 -- Espessura alterada para 1
     box.Color = boxColor
-    box.Filled = false
     box.Visible = false
+    ESPObjects[player] = box
     return box
+end
+
+local function CreateNameTag(player)
+    local nametag = Drawing.new("Text")
+    nametag.Size = nameTagSize
+    nametag.Color = nameTagColor
+    nametag.Visible = false
+    NameTags[player] = nametag
+    return nametag
 end
 
 local function UpdateBox(box, rootPart)
@@ -213,7 +222,7 @@ local function UpdateBox(box, rootPart)
     local distance = (rootPart.Position - localChar.HumanoidRootPart.Position).Magnitude
     local viewportPoint, onScreen = workspace.CurrentCamera:WorldToViewportPoint(rootPart.Position)
 
-    if onScreen and distance <= espDistance then
+    if BoxESPEnabled and onScreen and distance <= espDistance then
         local size = Vector2.new(2000 / viewportPoint.Z, 4000 / viewportPoint.Z)
         box.Size = size
         box.Position = Vector2.new(viewportPoint.X - size.X / 2, viewportPoint.Y - size.Y / 2)
@@ -223,126 +232,38 @@ local function UpdateBox(box, rootPart)
     end
 end
 
-local function HandleExistingPlayersESP()
-    for _, player in ipairs(game.Players:GetPlayers()) do
-        if player ~= game.Players.LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local box = CreateBox()
-            ESPObjects[player.Name] = box
-            coroutine.wrap(function()
-                while BoxESPEnabled and player.Character and player.Character:FindFirstChild("HumanoidRootPart") do
-                    UpdateBox(box, player.Character.HumanoidRootPart)
-                    wait(0.01) -- Atualização mais rápida
-                end
-                if ESPObjects[player.Name] then
-                    ESPObjects[player.Name]:Remove()
-                    ESPObjects[player.Name] = nil
-                end
-            end)()
-        end
+local function UpdateNameTag(nametag, player)
+    local localChar = game.Players.LocalPlayer.Character
+    local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not localChar or not localChar:FindFirstChild("HumanoidRootPart") or not rootPart then return end
+
+    local distance = (rootPart.Position - localChar.HumanoidRootPart.Position).Magnitude
+    local viewportPoint, onScreen = workspace.CurrentCamera:WorldToViewportPoint(rootPart.Position)
+
+    if NameTagsEnabled and onScreen and distance <= espDistance then
+        nametag.Text = player.Name
+        nametag.Position = Vector2.new(viewportPoint.X, viewportPoint.Y - 20)
+        nametag.Visible = true
+    else
+        nametag.Visible = false
     end
 end
 
 local function ToggleBoxESP(state)
     BoxESPEnabled = state
-    if BoxESPEnabled then
-        HandleExistingPlayersESP() -- Lida com jogadores já existentes
-        game.Players.PlayerAdded:Connect(function(player)
-            player.CharacterAdded:Connect(function(character)
-                if character:FindFirstChild("HumanoidRootPart") then
-                    local box = CreateBox()
-                    ESPObjects[player.Name] = box
-                    coroutine.wrap(function()
-                        while BoxESPEnabled and character:FindFirstChild("HumanoidRootPart") do
-                            UpdateBox(box, character.HumanoidRootPart)
-                            wait(0.03)
-                        end
-                        if ESPObjects[player.Name] then
-                            ESPObjects[player.Name]:Remove()
-                            ESPObjects[player.Name] = nil
-                        end
-                    end)()
-                end
-            end)
-        end)
-    else
+    if not BoxESPEnabled then
         for _, box in pairs(ESPObjects) do
-            box:Remove()
-        end
-        ESPObjects = {}
-    end
-end
-
--- Funções para Nametags
-local function CreateNameTag()
-    local nametag = Drawing.new("Text")
-    nametag.Size = nameTagSize
-    nametag.Color = nameTagColor
-    nametag.Visible = false
-    return nametag
-end
-
-
-local function UpdateNameTag(nametag, rootPart)
-    local localChar = game.Players.LocalPlayer.Character
-    if not localChar or not localChar:FindFirstChild("HumanoidRootPart") then return end
-
-    local distance = (rootPart.Position - localChar.HumanoidRootPart.Position).Magnitude
-    local viewportPoint, onScreen = workspace.CurrentCamera:WorldToViewportPoint(rootPart.Position)
-
-    nametag.Visible = onScreen and distance <= espDistance
-    if nametag.Visible then
-        nametag.Position = Vector2.new(viewportPoint.X, viewportPoint.Y - 20)
-    end
-end
-
-local function HandleExistingPlayersNameTags()
-    for _, player in ipairs(game.Players:GetPlayers()) do
-        if player ~= game.Players.LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local nametag = CreateNameTag()
-            NameTags[player.Name] = nametag
-            coroutine.wrap(function()
-                while NameTagsEnabled and player.Character and player.Character:FindFirstChild("HumanoidRootPart") do
-                    nametag.Text = player.Name
-                    UpdateNameTag(nametag, player.Character.HumanoidRootPart)
-                    wait(0.01)
-                end
-                if NameTags[player.Name] then
-                    NameTags[player.Name]:Remove()
-                    NameTags[player.Name] = nil
-                end
-            end)()
+            box.Visible = false
         end
     end
 end
 
 local function ToggleNameTags(state)
     NameTagsEnabled = state
-    if NameTagsEnabled then
-        HandleExistingPlayersNameTags() -- Lida com jogadores já existentes
-        game.Players.PlayerAdded:Connect(function(player)
-            player.CharacterAdded:Connect(function(character)
-                if character:FindFirstChild("HumanoidRootPart") then
-                    local nametag = CreateNameTag()
-                    NameTags[player.Name] = nametag
-                    coroutine.wrap(function()
-                        while NameTagsEnabled and character:FindFirstChild("HumanoidRootPart") do
-                            nametag.Text = player.Name
-                            UpdateNameTag(nametag, character.HumanoidRootPart)
-                            wait(0.03)
-                        end
-                        if NameTags[player.Name] then
-                            NameTags[player.Name]:Remove()
-                            NameTags[player.Name] = nil
-                        end
-                    end)()
-                end
-            end)
-        end)
-    else
+    if not NameTagsEnabled then
         for _, nametag in pairs(NameTags) do
-            nametag:Remove()
+            nametag.Visible = false
         end
-        NameTags = {}
     end
 end
 
@@ -351,7 +272,6 @@ function updateFovCircle()
     fovCircle.Position = Vector2.new(workspace.CurrentCamera.ViewportSize.X / 2, workspace.CurrentCamera.ViewportSize.Y / 2)
     fovCircle.Color = fovColor -- Garante que a cor seja atualizada
 end
-
 
 
 -- Modificar a função enableAimbot para:
@@ -374,7 +294,7 @@ function enableAimbot(state)
                         local distanceFromMouse = (Vector2.new(screenPoint.X, screenPoint.Y) - mousePosition).Magnitude
 
                         local playerDistance = (head.Position - camera.CFrame.Position).Magnitude
-                        if onScreen and distanceFromMouse < fovSize and distanceFromMouse < shortestDistance and playerDistance <= aimDistance then
+                        if onScreen and distanceFromMouse < fovSize and distanceFromMouse < shortestDistance and playerDistance <= aimDistance then -- Usa aimDistance
                             shortestDistance = distanceFromMouse
                             closestTarget = head
                         end
@@ -1499,7 +1419,18 @@ end
 -- Loop principal de atualização --------------------------------------------------------------------
 RunService.RenderStepped:Connect(function()
     for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
+        if player ~= LocalPlayer and player.Character then
+            local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+            if rootPart then
+                -- Updates for Box and Nametags
+                if ESPObjects[player] then
+                    UpdateBox(ESPObjects[player], rootPart)
+                end
+                if NameTags[player] then
+                    UpdateNameTag(NameTags[player], player)
+                end
+            end
+            -- Updates for Advanced ESP
             updateSkeleton(player)
             updateHeadCircle(player)
             updateDistanceElements(player)
@@ -1509,6 +1440,15 @@ end)
 
 -- Gerenciamento de jogadores -----------------------------------------------------------------------
 local function addPlayer(player)
+    -- ESPObjects e NameTags
+    if not ESPObjects[player] then
+        CreateBox(player)
+    end
+    if not NameTags[player] then
+        CreateNameTag(player)
+    end
+
+    -- ESP Avançado
     ESPAdvancedData.Skeletons[player] = createSkeleton(player)
     ESPAdvancedData.HeadCircles[player] = createHeadCircle()
     ESPAdvancedData.DistanceLines[player] = createDistanceLine()
@@ -1516,14 +1456,30 @@ local function addPlayer(player)
 end
 
 local function removePlayer(player)
+    -- Remove ESPObjects e NameTags
+    if ESPObjects[player] and ESPObjects[player]:IsA("Drawing") then
+        ESPObjects[player]:Remove()
+    end
+    ESPObjects[player] = nil
+    
+    if NameTags[player] and NameTags[player]:IsA("Drawing") then
+        NameTags[player]:Remove()
+    end
+    NameTags[player] = nil
+
+    -- Remove ESP Avançado
     for elementType, data in pairs(ESPAdvancedData) do
         if data[player] then
             if elementType == "Skeletons" then
                 for _, line in pairs(data[player]) do
-                    line:Remove()
+                    if line and line:IsA("Drawing") then
+                        line:Remove()
+                    end
                 end
             else
-                data[player]:Remove()
+                if data[player] and data[player]:IsA("Drawing") then
+                    data[player]:Remove()
+                end
             end
             data[player] = nil
         end
@@ -1537,6 +1493,44 @@ Players.PlayerAdded:Connect(function(player)
 end)
 
 Players.PlayerRemoving:Connect(removePlayer)
+
+-- Loop de verificação de jogadores para evitar bugs e jogadores que se reconectam
+spawn(function()
+    while task.wait(2) do
+        if BoxESPEnabled or NameTagsEnabled or DistanceLineEnabled or SkeletonEnabled or HeadCircleEnabled or DistanceTextEnabled then
+            -- Verificação para adicionar novos jogadores ou jogadores que se reconectaram
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer then
+                    if not ESPObjects[player] then
+                        addPlayer(player)
+                    end
+                end
+            end
+
+            -- Verificação para remover jogadores que saíram
+            local playersInMap = {}
+            for _, player in ipairs(Players:GetPlayers()) do
+                playersInMap[player] = true
+            end
+            
+            for player, _ in pairs(ESPObjects) do
+                if not playersInMap[player] then
+                    removePlayer(player)
+                end
+            end
+            for player, _ in pairs(NameTags) do
+                if not playersInMap[player] then
+                    removePlayer(player)
+                end
+            end
+            for player, _ in pairs(ESPAdvancedData.Skeletons) do
+                if not playersInMap[player] then
+                    removePlayer(player)
+                end
+            end
+        end
+    end
+end)
 
 -- UI (WallTab) --------------------------------------------------------------------------------------
 WallTab:AddToggle({
@@ -1609,9 +1603,10 @@ WallTab:AddSlider({
     Default = 500,
     Color = Color3.fromRGB(119, 18, 169),
     Increment = 25,
-    ValueName = "Studs",
+    ValueName = "Metros",
     Callback = function(value)
         espDistance = value
+        aimDistance = value -- Sincroniza a distância do Aimbot
     end
 })
 
