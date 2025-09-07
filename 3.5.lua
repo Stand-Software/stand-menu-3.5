@@ -873,7 +873,7 @@ ExploitsTab:AddToggle({
 
 ExploitsTab:AddBind({
     Name = "Toggle Freecam",
-    Default = Enum.KeyCode.N,
+    Default = Enum.KeyCode.Z,
     Hold = false,
     Callback = function()
         if freecamToggleActive then
@@ -1099,7 +1099,7 @@ end
 -- Bind configurável
 ConfigTab:AddBind({
     Name = "Travar/Destravar O Mouse",
-    Default = Enum.KeyCode.K,
+    Default = Enum.KeyCode.V,
     Hold = false,
     Callback = function()
         toggleMouseLock()
