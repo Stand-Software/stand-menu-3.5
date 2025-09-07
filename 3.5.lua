@@ -1305,11 +1305,11 @@ local ESPAdvancedData = {
 local HealthBarEnabled = false
 local HealthBarData = {}
 local localPlayerEspEnabled = false
+local healthBarSideOffset = 10 -- NOVO: Distância lateral da barra de vida (ajustável no slider)
 
 -- Funções de criação dos elementos -----------------------------------------------------------------
 local function createSkeleton(player)
-    -- Mapeamento para R15
-    local r15Parts = {
+    local parts = {
         {"Head", "UpperTorso"},
         {"UpperTorso", "LowerTorso"},
         {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
@@ -1317,47 +1317,15 @@ local function createSkeleton(player)
         {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
         {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
     }
-    -- Mapeamento para R6 (corrigido)
-    local r6Parts = {
-        {"Head", "Torso"},
-        {"Torso", "Left Arm"},
-        {"Torso", "Right Arm"},
-        {"Torso", "Left Leg"},
-        {"Torso", "Right Leg"},
-        -- Para conectar as pernas ao tronco
-        {"Left Leg", "Right Leg"} 
-    }
-
-    local skeleton = {}
-    local character = player.Character
-
-    -- Verifica se o boneco é R6 (procurando por 'Torso' e 'Left Leg')
-    if character and character:FindFirstChild("Torso") and character:FindFirstChild("Left Leg") then
-        for _, pair in ipairs(r6Parts) do
-            local part1 = character:FindFirstChild(pair[1])
-            local part2 = character:FindFirstChild(pair[2])
-            if part1 and part2 then
-                local line = Drawing.new("Line")
-                line.Thickness = 1
-                line.Color = ESPAdvancedColor
-                line.Visible = false
-                skeleton[pair[1].."-"..pair[2]] = line
-            end
-        end
-    else -- Senão, assume que é R15
-        for _, pair in ipairs(r15Parts) do
-            local part1 = character:FindFirstChild(pair[1])
-            local part2 = character:FindFirstChild(pair[2])
-            if part1 and part2 then
-                local line = Drawing.new("Line")
-                line.Thickness = 1
-                line.Color = ESPAdvancedColor
-                line.Visible = false
-                skeleton[pair[1].."-"..pair[2]] = line
-            end
-        end
-    end
     
+    local skeleton = {}
+    for _, pair in ipairs(parts) do
+        local line = Drawing.new("Line")
+        line.Thickness = 1
+        line.Color = ESPAdvancedColor
+        line.Visible = false
+        skeleton[pair[1].."-"..pair[2]] = line
+    end
     return skeleton
 end
 
@@ -1414,39 +1382,12 @@ local function updateSkeleton(player)
     local character = player.Character
     if not character or not ESPAdvancedData.Skeletons[player] then return end
 
-    -- Mapeamento para R15
-    local r15Parts = {
-        {"Head", "UpperTorso"},
-        {"UpperTorso", "LowerTorso"},
-        {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
-        {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
-        {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
-        {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
-    }
-    -- Mapeamento para R6 (corrigido)
-    local r6Parts = {
-        {"Head", "Torso"},
-        {"Torso", "Left Arm"},
-        {"Torso", "Right Arm"},
-        {"Torso", "Left Leg"},
-        {"Torso", "Right Leg"},
-        {"Left Leg", "Right Leg"}
-    }
-    
-    -- Verifica se o boneco é R6
-    local partsToDraw = {}
-    if character:FindFirstChild("Torso") and character:FindFirstChild("Left Leg") then
-        partsToDraw = r6Parts
-    else
-        partsToDraw = r15Parts
-    end
-    
-    for _, pair in ipairs(partsToDraw) do
-        local part1 = character:FindFirstChild(pair[1]) -- Não remove mais os espaços
-        local part2 = character:FindFirstChild(pair[2]) -- Não remove mais os espaços
-        local line = ESPAdvancedData.Skeletons[player][pair[1].."-"..pair[2]]
+    for boneName, line in pairs(ESPAdvancedData.Skeletons[player]) do
+        local parts = boneName:split("-")
+        local part1 = character:FindFirstChild(parts[1])
+        local part2 = character:FindFirstChild(parts[2])
         
-        if part1 and part2 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and line then
+        if part1 and part2 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local distance = (part1.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
             if distance <= espDistance then
                 local pos1 = Camera:WorldToViewportPoint(part1.Position)
@@ -1458,7 +1399,7 @@ local function updateSkeleton(player)
             else
                 line.Visible = false
             end
-        elseif line then
+        else
             line.Visible = false
         end
     end
@@ -1523,8 +1464,9 @@ local function updateHealthBar(player)
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
     local healthBarElements = HealthBarData[player]
-
-    if not HealthBarEnabled or not humanoid or not rootPart or not healthBarElements or (not localPlayerEspEnabled and player == plr) then
+    
+    -- Verifica se a barra de vida está ativada e se o jogador existe
+    if not HealthBarEnabled or not humanoid or not rootPart or not healthBarElements then
         if healthBarElements then
             healthBarElements.background.Visible = false
             healthBarElements.bar.Visible = false
@@ -1537,29 +1479,32 @@ local function updateHealthBar(player)
     local viewportPoint, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
 
     if onScreen and distance <= espDistance then
-        -- A barra de vida agora é calculada independentemente da box
-        local viewportPoint = Camera:WorldToViewportPoint(rootPart.Position)
-        local boxSizeY = 2000 / viewportPoint.Z 
+        -- Calcula o tamanho da barra de vida em relação à tela (proporcional à distância)
+        local barHeight = 4000 / viewportPoint.Z
         local barWidth = 5
-        local barX = viewportPoint.X - boxSizeY / 4 -- Posição horizontal à esquerda, proporcional
-        local barY = viewportPoint.Y - boxSizeY / 2
         
-        local healthPercentage = humanoid.Health / humanoid.MaxHealth
-        local barHeight = boxSizeY * healthPercentage
+        -- Calcula a posição x da barra de vida. O offset é agora proporcional à profundidade (viewportPoint.Z)
+        -- Isso garante que a barra fique sempre 'colada' ao lado do personagem.
+        local barX = viewportPoint.X - (barHeight / 2) * 0.5 - healthBarSideOffset
+        local barY = viewportPoint.Y - barHeight / 2
 
-        -- Atualiza o fundo da barra de vida
-        healthBarElements.background.Size = Vector2.new(barWidth, boxSizeY)
+        -- Calcula a porcentagem de vida
+        local healthPercentage = humanoid.Health / humanoid.MaxHealth
+        local currentBarHeight = barHeight * healthPercentage
+
+        -- Atualiza o fundo da barra de vida (caixa preta)
+        healthBarElements.background.Size = Vector2.new(barWidth, barHeight)
         healthBarElements.background.Position = Vector2.new(barX, barY)
         healthBarElements.background.Visible = true
 
-        -- Atualiza a barra de vida
-        healthBarElements.bar.Size = Vector2.new(barWidth, barHeight)
-        healthBarElements.bar.Position = Vector2.new(barX, barY + (boxSizeY - barHeight))
+        -- Atualiza a barra de vida principal (verde, amarela, vermelha)
+        healthBarElements.bar.Size = Vector2.new(barWidth, currentBarHeight)
+        healthBarElements.bar.Position = Vector2.new(barX, barY + (barHeight - currentBarHeight))
         healthBarElements.bar.Visible = true
 
-        -- Move o texto da vida para a esquerda
+        -- Move o texto da vida para a esquerda da barra
         healthBarElements.text.Text = math.floor(humanoid.Health + 0.5) .. "/" .. humanoid.MaxHealth
-        healthBarElements.text.Position = Vector2.new(barX - 45, barY + boxSizeY / 2)
+        healthBarElements.text.Position = Vector2.new(barX - 45, barY + barHeight / 2)
         healthBarElements.text.Visible = true
 
         -- Reajusta a cor da barra de vida com base na vida
@@ -1750,6 +1695,19 @@ WallTab:AddToggle({
     Default = false,
     Callback = function(state)
         HealthBarEnabled = state
+    end
+})
+
+WallTab:AddSlider({
+    Name = "Posição da Barra de Vida",
+    Min = 0,
+    Max = 200,
+    Default = 10,
+    Color = Color3.fromRGB(119, 18, 169),
+    Increment = 1,
+    ValueName = "Posição",
+    Callback = function(value)
+        healthBarSideOffset = value
     end
 })
 
