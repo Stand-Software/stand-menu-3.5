@@ -43,6 +43,7 @@ local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
 local aimbotKeybind = Enum.KeyCode.Q
 local aimbotHolding = false
+local aimbotTeam = false
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -227,6 +228,7 @@ local function UpdateBox(box, rootPart)
         box.Size = size
         box.Position = Vector2.new(viewportPoint.X - size.X / 2, viewportPoint.Y - size.Y / 2)
         box.Visible = true
+        return box.Position, box.Size
     else
         box.Visible = false
     end
@@ -284,18 +286,31 @@ function enableAimbot(state)
             if aimbotEnabled and aimbotHolding then  -- Só ativa quando segurando a bind
                 local camera = workspace.CurrentCamera
                 local closestTarget = nil
-                local shortestDistance = math.huge
+                -- Mudei de shortestDistance para shortestDistanceToPlayer para priorizar o player mais próximo, não o mais próximo do centro da tela.
+                local shortestDistanceToPlayer = math.huge
+                local mousePosition = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
 
                 for _, player in pairs(game.Players:GetPlayers()) do
                     if player ~= plr and player.Character and player.Character:FindFirstChild("Head") then
+                        -- Adicionando a verificação de time
+                        if aimbotTeam and player.Team == plr.Team then
+                            continue
+                        end
+
                         local head = player.Character.Head
                         local screenPoint, onScreen = camera:WorldToScreenPoint(head.Position)
-                        local mousePosition = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
                         local distanceFromMouse = (Vector2.new(screenPoint.X, screenPoint.Y) - mousePosition).Magnitude
+                        
+                        -- Calcula a distância do seu player até a cabeça do alvo
+                        local playerDistance = (head.Position - plr.Character.HumanoidRootPart.Position).Magnitude
 
-                        local playerDistance = (head.Position - camera.CFrame.Position).Magnitude
-                        if onScreen and distanceFromMouse < fovSize and distanceFromMouse < shortestDistance and playerDistance <= aimDistance then -- Usa aimDistance
-                            shortestDistance = distanceFromMouse
+                        -- A nova condição de seleção de alvo.
+                        -- 1. O alvo está na tela?
+                        -- 2. Está dentro do FOV?
+                        -- 3. Está dentro da distância máxima do menu?
+                        -- 4. É o alvo mais próximo do seu jogador (e não da sua mira)?
+                        if onScreen and distanceFromMouse < fovSize and playerDistance <= aimDistance and playerDistance < shortestDistanceToPlayer then
+                            shortestDistanceToPlayer = playerDistance
                             closestTarget = head
                         end
                     end
@@ -881,8 +896,9 @@ ExploitsTab:AddButton({
                     Title = "Voice Chat",
                     Text = "Erro ao reconectar.",
                     Duration = 3
-                })
-            end
+                    
+                    })
+        end
         else
             print("❌ VoiceChatService não disponível neste jogo.")
             game.StarterGui:SetCore("SendNotification", {
@@ -1285,6 +1301,11 @@ local ESPAdvancedData = {
     DistanceTexts = {}
 }
 
+-- Variáveis para a nova função de barra de vida
+local HealthBarEnabled = false
+local HealthBarData = {}
+local localPlayerEspEnabled = false
+
 -- Funções de criação dos elementos -----------------------------------------------------------------
 local function createSkeleton(player)
     local parts = {
@@ -1332,6 +1353,27 @@ local function createDistanceText()
     text.Size = 14
     text.Outline = true
     return text
+end
+
+local function createHealthBar(player)
+    local background = Drawing.new("Square")
+    background.Color = Color3.fromRGB(0, 0, 0)
+    background.Thickness = 1
+    background.Visible = false
+    background.Filled = true
+    
+    local bar = Drawing.new("Square")
+    bar.Color = Color3.fromRGB(0, 255, 0)
+    bar.Thickness = 1
+    bar.Visible = false
+    bar.Filled = true
+
+    local text = Drawing.new("Text")
+    text.Color = Color3.fromRGB(255, 255, 255)
+    text.Size = 12
+    text.Visible = false
+
+    return {background = background, bar = bar, text = text}
 end
 
 -- Funções de atualização ---------------------------------------------------------------------------
@@ -1416,11 +1458,71 @@ local function updateDistanceElements(player)
     end
 end
 
+local function updateHealthBar(player)
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    local healthBarElements = HealthBarData[player]
+
+    if not HealthBarEnabled or not humanoid or not rootPart or not healthBarElements or (not localPlayerEspEnabled and player == plr) then
+        if healthBarElements then
+            healthBarElements.background.Visible = false
+            healthBarElements.bar.Visible = false
+            healthBarElements.text.Visible = false
+        end
+        return
+    end
+
+    local distance = (rootPart.Position - plr.Character.HumanoidRootPart.Position).Magnitude
+    local viewportPoint, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+
+    if onScreen and distance <= espDistance then
+        -- A barra de vida agora é calculada independentemente da box
+        local viewportPoint = Camera:WorldToViewportPoint(rootPart.Position)
+        local boxSizeY = 2000 / viewportPoint.Z 
+        local barWidth = 5
+        local barX = viewportPoint.X - boxSizeY / 4 -- Posição horizontal à esquerda, proporcional
+        local barY = viewportPoint.Y - boxSizeY / 2
+        
+        local healthPercentage = humanoid.Health / humanoid.MaxHealth
+        local barHeight = boxSizeY * healthPercentage
+
+        -- Atualiza o fundo da barra de vida
+        healthBarElements.background.Size = Vector2.new(barWidth, boxSizeY)
+        healthBarElements.background.Position = Vector2.new(barX, barY)
+        healthBarElements.background.Visible = true
+
+        -- Atualiza a barra de vida
+        healthBarElements.bar.Size = Vector2.new(barWidth, barHeight)
+        healthBarElements.bar.Position = Vector2.new(barX, barY + (boxSizeY - barHeight))
+        healthBarElements.bar.Visible = true
+
+        -- Move o texto da vida para a esquerda
+        healthBarElements.text.Text = math.floor(humanoid.Health + 0.5) .. "/" .. humanoid.MaxHealth
+        healthBarElements.text.Position = Vector2.new(barX - 45, barY + boxSizeY / 2)
+        healthBarElements.text.Visible = true
+
+        -- Reajusta a cor da barra de vida com base na vida
+        if humanoid.Health < (humanoid.MaxHealth / 4) then
+            healthBarElements.bar.Color = Color3.fromRGB(255, 0, 0) -- Vermelho
+        elseif humanoid.Health < (humanoid.MaxHealth / 2) then
+            healthBarElements.bar.Color = Color3.fromRGB(255, 255, 0) -- Amarelo
+        else
+            healthBarElements.bar.Color = Color3.fromRGB(0, 255, 0) -- Verde
+        end
+    else
+        healthBarElements.background.Visible = false
+        healthBarElements.bar.Visible = false
+        healthBarElements.text.Visible = false
+    end
+end
+
+
 -- Loop principal de atualização --------------------------------------------------------------------
 RunService.RenderStepped:Connect(function()
     for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+        if localPlayerEspEnabled or player ~= LocalPlayer then
+            local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
             if rootPart then
                 -- Updates for Box and Nametags
                 if ESPObjects[player] then
@@ -1435,6 +1537,8 @@ RunService.RenderStepped:Connect(function()
             updateHeadCircle(player)
             updateDistanceElements(player)
         end
+        -- A barra de vida agora é sempre atualizada se estiver ativada, independentemente de outras opções
+        updateHealthBar(player)
     end
 end)
 
@@ -1453,6 +1557,9 @@ local function addPlayer(player)
     ESPAdvancedData.HeadCircles[player] = createHeadCircle()
     ESPAdvancedData.DistanceLines[player] = createDistanceLine()
     ESPAdvancedData.DistanceTexts[player] = createDistanceText()
+    
+    -- Nova barra de vida
+    HealthBarData[player] = createHealthBar(player)
 end
 
 local function removePlayer(player)
@@ -1484,6 +1591,14 @@ local function removePlayer(player)
             data[player] = nil
         end
     end
+
+    -- Remove barra de vida
+    if HealthBarData[player] then
+        HealthBarData[player].background:Remove()
+        HealthBarData[player].bar:Remove()
+        HealthBarData[player].text:Remove()
+    end
+    HealthBarData[player] = nil
 end
 
 Players.PlayerAdded:Connect(function(player)
@@ -1497,10 +1612,10 @@ Players.PlayerRemoving:Connect(removePlayer)
 -- Loop de verificação de jogadores para evitar bugs e jogadores que se reconectam
 spawn(function()
     while task.wait(2) do
-        if BoxESPEnabled or NameTagsEnabled or DistanceLineEnabled or SkeletonEnabled or HeadCircleEnabled or DistanceTextEnabled then
+        if BoxESPEnabled or NameTagsEnabled or DistanceLineEnabled or SkeletonEnabled or HeadCircleEnabled or DistanceTextEnabled or HealthBarEnabled or localPlayerEspEnabled then
             -- Verificação para adicionar novos jogadores ou jogadores que se reconectaram
             for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer then
+                if player ~= LocalPlayer or localPlayerEspEnabled then
                     if not ESPObjects[player] then
                         addPlayer(player)
                     end
@@ -1524,6 +1639,11 @@ spawn(function()
                 end
             end
             for player, _ in pairs(ESPAdvancedData.Skeletons) do
+                if not playersInMap[player] then
+                    removePlayer(player)
+                end
+            end
+            for player, _ in pairs(HealthBarData) do
                 if not playersInMap[player] then
                     removePlayer(player)
                 end
@@ -1562,6 +1682,31 @@ WallTab:AddToggle({
     Default = false,
     Callback = function(state)
         DistanceTextEnabled = state
+    end
+})
+
+WallTab:AddToggle({
+    Name = "Barra de Vida",
+    Default = false,
+    Callback = function(state)
+        HealthBarEnabled = state
+    end
+})
+
+local localPlayerSection = WallTab:AddSection({
+    Name = "Localplayer"
+})
+
+localPlayerSection:AddToggle({
+    Name = "Localplayer",
+    Default = false,
+    Callback = function(state)
+        localPlayerEspEnabled = state
+        if state then
+            addPlayer(plr)
+        else
+            removePlayer(plr) -- Remove o ESP do seu jogador se a opção for desativada
+        end
     end
 })
 
@@ -1682,6 +1827,14 @@ AimbotTab:AddBind({
     end
 })
 
+AimbotTab:AddToggle({
+    Name = "Team",
+    Default = false,
+    Callback = function(state)
+        aimbotTeam = state
+    end
+})
+
 -- Corrigir os Sliders
 AimbotTab:AddSlider({
     Name = "Aimbot Fov",
@@ -1721,6 +1874,81 @@ AimbotTab:AddColorpicker({
     end
 })
 
+--- Reset ESP
+WallTab:AddButton({
+    Name = "Resetar ESP",
+    Callback = function()
+        -- Desliga todas as checkboxes visuais
+        BoxESPEnabled = false
+        NameTagsEnabled = false
+        HeadCircleEnabled = false
+        SkeletonEnabled = false
+        DistanceLineEnabled = false
+        DistanceTextEnabled = false
+        HealthBarEnabled = false
+        localPlayerEspEnabled = false
+
+        -- Remove todos os desenhos da tela
+        for _, drawingObject in pairs(ESPObjects) do
+            drawingObject:Remove()
+        end
+        ESPObjects = {}
+        for _, drawingObject in pairs(NameTags) do
+            drawingObject:Remove()
+        end
+        NameTags = {}
+
+        for _, skeleton in pairs(ESPAdvancedData.Skeletons) do
+            for _, line in pairs(skeleton) do
+                line:Remove()
+            end
+        end
+        ESPAdvancedData.Skeletons = {}
+        
+        for _, circle in pairs(ESPAdvancedData.HeadCircles) do
+            circle:Remove()
+        end
+        ESPAdvancedData.HeadCircles = {}
+
+        for _, line in pairs(ESPAdvancedData.DistanceLines) do
+            line:Remove()
+        end
+        ESPAdvancedData.DistanceLines = {}
+        
+        for _, text in pairs(ESPAdvancedData.DistanceTexts) do
+            text:Remove()
+        end
+        ESPAdvancedData.DistanceTexts = {}
+        
+        for _, healthBar in pairs(HealthBarData) do
+            healthBar.background:Remove()
+            healthBar.bar:Remove()
+            healthBar.text:Remove()
+        end
+        HealthBarData = {}
+
+        -- Remove qualquer Highlight ESP
+        local highlightStorage = game:GetService("CoreGui"):FindFirstChild("Highlight_Storage")
+        if highlightStorage then
+            highlightStorage:Destroy()
+        end
+        
+        -- Adiciona o ESP novamente para todos os jogadores que já estão no servidor.
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                addPlayer(player)
+            end
+        end
+        
+        -- Atualiza a interface do usuário para refletir as mudanças
+        OrionLib:MakeNotification({
+            Name = "Reset",
+            Content = "Todas as funções do ESP foram resetadas!",
+            Image = "rbxassetid://4483345998",
+            Time = 3
+        })
+    end
+})
 
 -- Atualizar a função esp para usar as variáveis de cor
 function esp(enabled)
