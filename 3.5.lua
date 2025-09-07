@@ -1308,7 +1308,8 @@ local localPlayerEspEnabled = false
 
 -- Funções de criação dos elementos -----------------------------------------------------------------
 local function createSkeleton(player)
-    local parts = {
+    -- Mapeamento para R15
+    local r15Parts = {
         {"Head", "UpperTorso"},
         {"UpperTorso", "LowerTorso"},
         {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
@@ -1316,15 +1317,47 @@ local function createSkeleton(player)
         {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
         {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
     }
-    
+    -- Mapeamento para R6 (corrigido)
+    local r6Parts = {
+        {"Head", "Torso"},
+        {"Torso", "Left Arm"},
+        {"Torso", "Right Arm"},
+        {"Torso", "Left Leg"},
+        {"Torso", "Right Leg"},
+        -- Para conectar as pernas ao tronco
+        {"Left Leg", "Right Leg"} 
+    }
+
     local skeleton = {}
-    for _, pair in ipairs(parts) do
-        local line = Drawing.new("Line")
-        line.Thickness = 1
-        line.Color = ESPAdvancedColor
-        line.Visible = false
-        skeleton[pair[1].."-"..pair[2]] = line
+    local character = player.Character
+
+    -- Verifica se o boneco é R6 (procurando por 'Torso' e 'Left Leg')
+    if character and character:FindFirstChild("Torso") and character:FindFirstChild("Left Leg") then
+        for _, pair in ipairs(r6Parts) do
+            local part1 = character:FindFirstChild(pair[1])
+            local part2 = character:FindFirstChild(pair[2])
+            if part1 and part2 then
+                local line = Drawing.new("Line")
+                line.Thickness = 1
+                line.Color = ESPAdvancedColor
+                line.Visible = false
+                skeleton[pair[1].."-"..pair[2]] = line
+            end
+        end
+    else -- Senão, assume que é R15
+        for _, pair in ipairs(r15Parts) do
+            local part1 = character:FindFirstChild(pair[1])
+            local part2 = character:FindFirstChild(pair[2])
+            if part1 and part2 then
+                local line = Drawing.new("Line")
+                line.Thickness = 1
+                line.Color = ESPAdvancedColor
+                line.Visible = false
+                skeleton[pair[1].."-"..pair[2]] = line
+            end
+        end
     end
+    
     return skeleton
 end
 
@@ -1381,12 +1414,39 @@ local function updateSkeleton(player)
     local character = player.Character
     if not character or not ESPAdvancedData.Skeletons[player] then return end
 
-    for boneName, line in pairs(ESPAdvancedData.Skeletons[player]) do
-        local parts = boneName:split("-")
-        local part1 = character:FindFirstChild(parts[1])
-        local part2 = character:FindFirstChild(parts[2])
+    -- Mapeamento para R15
+    local r15Parts = {
+        {"Head", "UpperTorso"},
+        {"UpperTorso", "LowerTorso"},
+        {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
+        {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+        {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
+        {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
+    }
+    -- Mapeamento para R6 (corrigido)
+    local r6Parts = {
+        {"Head", "Torso"},
+        {"Torso", "Left Arm"},
+        {"Torso", "Right Arm"},
+        {"Torso", "Left Leg"},
+        {"Torso", "Right Leg"},
+        {"Left Leg", "Right Leg"}
+    }
+    
+    -- Verifica se o boneco é R6
+    local partsToDraw = {}
+    if character:FindFirstChild("Torso") and character:FindFirstChild("Left Leg") then
+        partsToDraw = r6Parts
+    else
+        partsToDraw = r15Parts
+    end
+    
+    for _, pair in ipairs(partsToDraw) do
+        local part1 = character:FindFirstChild(pair[1]) -- Não remove mais os espaços
+        local part2 = character:FindFirstChild(pair[2]) -- Não remove mais os espaços
+        local line = ESPAdvancedData.Skeletons[player][pair[1].."-"..pair[2]]
         
-        if part1 and part2 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        if part1 and part2 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and line then
             local distance = (part1.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
             if distance <= espDistance then
                 local pos1 = Camera:WorldToViewportPoint(part1.Position)
@@ -1398,7 +1458,7 @@ local function updateSkeleton(player)
             else
                 line.Visible = false
             end
-        else
+        elseif line then
             line.Visible = false
         end
     end
