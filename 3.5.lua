@@ -1,6 +1,6 @@
 local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/jensonhirst/Orion/main/source')))()
 
-local Window = OrionLib:MakeWindow({Name = "💎Stand Menu V3.5", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})
+local Window = OrionLib:MakeWindow({Name = "💎Stand Menu V3.6", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})
 
 -- Variáveis de controle
 local flyEnabled = false
@@ -1308,8 +1308,8 @@ local localPlayerEspEnabled = false
 local healthBarSideOffset = 10 -- NOVO: Distância lateral da barra de vida (ajustável no slider)
 
 -- Funções de criação dos elementos -----------------------------------------------------------------
-local function createSkeleton(player)
-    local parts = {
+local function getR15SkeletonParts()
+    return {
         {"Head", "UpperTorso"},
         {"UpperTorso", "LowerTorso"},
         {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
@@ -1317,9 +1317,33 @@ local function createSkeleton(player)
         {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
         {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
     }
+end
+
+local function getR6SkeletonParts()
+    return {
+        {"Head", "Torso"},
+        {"Torso", "Left Arm"}, {"Left Arm", "Left Leg"},
+        {"Torso", "Right Arm"}, {"Right Arm", "Right Leg"},
+        {"Torso", "Left Leg"}, {"Left Leg", "Right Leg"} -- Torso para ambas pernas para evitar a parte 'lower'
+    }
+end
+
+local function createSkeleton(player)
+    local character = player.Character
+    if not character then return end
     
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    local partsToDraw = {}
+    if humanoid.RigType == Enum.HumanoidRigType.R15 then
+        partsToDraw = getR15SkeletonParts()
+    elseif humanoid.RigType == Enum.HumanoidRigType.R6 then
+        partsToDraw = getR6SkeletonParts()
+    end
+
     local skeleton = {}
-    for _, pair in ipairs(parts) do
+    for _, pair in ipairs(partsToDraw) do
         local line = Drawing.new("Line")
         line.Thickness = 1
         line.Color = ESPAdvancedColor
@@ -1382,10 +1406,23 @@ local function updateSkeleton(player)
     local character = player.Character
     if not character or not ESPAdvancedData.Skeletons[player] then return end
 
-    for boneName, line in pairs(ESPAdvancedData.Skeletons[player]) do
-        local parts = boneName:split("-")
-        local part1 = character:FindFirstChild(parts[1])
-        local part2 = character:FindFirstChild(parts[2])
+    local skeleton = ESPAdvancedData.Skeletons[player]
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    
+    local partsToDraw = {}
+    if humanoid.RigType == Enum.HumanoidRigType.R15 then
+        partsToDraw = getR15SkeletonParts()
+    elseif humanoid.RigType == Enum.HumanoidRigType.R6 then
+        partsToDraw = getR6SkeletonParts()
+    end
+
+    for _, pair in ipairs(partsToDraw) do
+        local line = skeleton[pair[1].."-"..pair[2]]
+        if not line then continue end
+        
+        local part1 = character:FindFirstChild(pair[1])
+        local part2 = character:FindFirstChild(pair[2])
         
         if part1 and part2 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local distance = (part1.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
