@@ -68,9 +68,6 @@ local freecamBoostSpeed = 2 -- Velocidade de boost do freecam
 
 -- Variáveis essenciais
 local Player = game:GetService("Players").LocalPlayer
-local Character = Player.Character or Player.CharacterAdded:Wait()
-local Humanoid = Character:WaitForChild("Humanoid")
-local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 local Camera = game:GetService("Workspace").CurrentCamera
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -81,43 +78,62 @@ local function onMouseMove(input)
     end
 end
 
+-- CORREÇÃO APLICADA AQUI: Busca o Character e as partes ATUAIS antes de ativar o Freecam
 local function enableFreecam()
+    local Character = Player.Character -- Pega o character atualizado
+    local HumanoidRootPart = Character and Character:FindFirstChild("HumanoidRootPart") -- Pega a HRP atualizada
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid") -- Pega a Humanoid atualizada
+
+    -- Se o personagem não estiver pronto (morreu e ainda está carregando), não ativa e notifica.
+    if not HumanoidRootPart or not Humanoid then
+        OrionLib:MakeNotification({
+            Name = "Freecam",
+            Content = "Seu personagem não está pronto ou você está morto!",
+            Image = "rbxassetid://4483345998",
+            Time = 3
+        })
+        return
+    end
+
     if not freecamEnabled then
         freecamEnabled = true
         Camera.CameraType = Enum.CameraType.Scriptable
         
-        -- Garante que a câmera comece na posição do jogador e olhe para frente
+        -- Garante que a câmera comece na posição do HumanoidRootPart ATUAL
         Camera.CFrame = HumanoidRootPart.CFrame
         
         -- Trava o mouse no centro da tela para um movimento de câmera mais suave
         UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
         UserInputService.MouseIconEnabled = false
         
-        -- Desabilitar movimentação do personagem
-        if Humanoid then
-            Humanoid.WalkSpeed = 0
-            Humanoid.JumpPower = 0
-            Humanoid.PlatformStand = true
-        end
+        -- Desabilitar movimentação do personagem (usando a nova Humanoid local)
+        Humanoid.WalkSpeed = 0
+        Humanoid.JumpPower = 0
+        Humanoid.PlatformStand = true
         
         -- Conexão para teleporte
         teleportConnection = UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
             if freecamEnabled and not gameProcessedEvent then
                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    -- Busca a HRP atualizada para o teleporte funcionar corretamente
+                    local currentHRP = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+                    if not currentHRP then return end -- Se o personagem sumiu durante o freecam
+
                     -- Cálculo do teleporte
                     local rayOrigin = Camera.CFrame.Position
                     local rayDirection = Camera.CFrame.LookVector * 1000
                     
                     local raycastParams = RaycastParams.new()
                     raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-                    raycastParams.FilterDescendantsInstances = {Character}
+                    -- Usa Player.Character para garantir que o filtro esteja no personagem atualizado
+                    raycastParams.FilterDescendantsInstances = {Player.Character} 
                     
                     local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
                     
                     if raycastResult then
-                        HumanoidRootPart.CFrame = CFrame.new(raycastResult.Position + Vector3.new(0, 3, 0))
+                        currentHRP.CFrame = CFrame.new(raycastResult.Position + Vector3.new(0, 3, 0))
                     else
-                        HumanoidRootPart.CFrame = CFrame.new(rayOrigin + (Camera.CFrame.LookVector * 50))
+                        currentHRP.CFrame = CFrame.new(rayOrigin + (Camera.CFrame.LookVector * 50))
                     end
                 end
             end
@@ -168,10 +184,20 @@ local function enableFreecam()
     end
 end
 
+-- CORREÇÃO APLICADA AQUI: Busca o Character e as partes ATUAIS antes de desativar o Freecam
 local function disableFreecam()
+    -- Pega as partes atuais
+    local Character = Player.Character
+    local HumanoidRootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+    
     freecamEnabled = false
     Camera.CameraType = Enum.CameraType.Custom
-    Camera.CFrame = HumanoidRootPart.CFrame
+    
+    -- Se o HRP existe, volta a câmera para ele.
+    if HumanoidRootPart then
+        Camera.CFrame = HumanoidRootPart.CFrame
+    end
     
     -- Restaura o comportamento padrão do mouse
     UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -182,7 +208,7 @@ local function disableFreecam()
     if teleportConnection then teleportConnection:Disconnect() end
     if renderSteppedConnection then renderSteppedConnection:Disconnect() end
     
-    -- Restaurar personagem
+    -- Restaurar personagem (usando a Humanoid local e atualizada)
     if Humanoid then
         Humanoid.WalkSpeed = 16
         Humanoid.JumpPower = 50
